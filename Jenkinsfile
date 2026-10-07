@@ -57,37 +57,17 @@ pipeline {
                 }
             }
         }
-       stage('commit version update') {
-           steps {
-               script {
-                   withCredentials([
-                       usernamePassword(
-                           credentialsId: 'github-credentials',
-                           usernameVariable: 'GIT_USERNAME',
-                           passwordVariable: 'GIT_PASSWORD'
-                       )
-                   ]) {
-                       sh '''
-                           set -e
-
-                           git config user.name "Jenkins"
-                           git config user.email "jenkins@nexo-raiden.local"
-
-                           git add .
-
-                           if git diff --cached --quiet; then
-                               echo "No version changes to commit."
-                               exit 0
-                           fi
-
-                           git commit -m "ci: version bump"
-
-                           git push \
-                             https://"$GIT_USERNAME":"$GIT_PASSWORD"@github.com/asambataiden/twn-devops-bootcamp-11-eks-java-maven-app-tree-jenkins-jobs.git \
-                             HEAD:refs/heads/jenkins-jobs
-                       '''
-                   }
-               }
-           }
-       }
+        stage('commit version update'){
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'github-credentials', passwordVariable: 'PASS', usernameVariable: 'USER')]){
+                        sh "git remote set-url origin https://${USER}:${PASS}@github.com:asambataiden/twn-devops-bootcamp-11-eks-java-maven-app-tree-jenkins-jobs.git"
+                        sh 'git add .'
+                        sh 'git commit -m "ci: version bump"'
+                        sh 'git push origin HEAD:refs/heads/jenkins-jobs'
+                    }
+                }
+            }
+        }
+    }
 }
