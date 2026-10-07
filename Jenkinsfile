@@ -9,20 +9,34 @@ pipeline {
         DOCKER_REPO_SERVER = '591132357918.dkr.ecr.eu-north-1.amazonaws.com'
         DOCKER_REPO = "${DOCKER_REPO_SERVER}/twn-devops-bootcamp/java-maven-app"
     }
+
     stages {
-        stage('increment version') {
+
+        stage('Increment Version') {
             steps {
                 script {
-                    echo 'incrementing app version...'
-                    sh 'mvn build-helper:parse-version versions:set \
-                        -DnewVersion=\\\${parsedVersion.majorVersion}.\\\${parsedVersion.minorVersion}.\\\${parsedVersion.nextIncrementalVersion} \
-                        versions:commit'
-                    def matcher = readFile('pom.xml') =~ '<version>(.+)</version>'
-                    def version = matcher[0][1]
-                    env.IMAGE_NAME = "$version-$BUILD_NUMBER"
+                    echo 'Incrementing application version...'
+
+                    sh '''
+                        mvn build-helper:parse-version versions:set \
+                          -DnewVersion=\\${parsedVersion.majorVersion}.\\${parsedVersion.minorVersion}.\\${parsedVersion.nextIncrementalVersion} \
+                          -DgenerateBackupPoms=false
+                    '''
+                    env.APP_VERSION = sh(
+                        script: '''
+                            mvn help:evaluate \
+                              -Dexpression=project.version \
+                              -q \
+                              -DforceStdout
+                        ''',
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Application version: ${env.APP_VERSION}"
                 }
             }
         }
+
         stage('build app') {
             steps {
                 script {
@@ -34,11 +48,16 @@ pipeline {
         stage('build image') {
             steps {
                 script {
+
+                    env.IMAGE_NAME = "${env.APP_VERSION}-${BUILD_NUMBER}"
+                    def imageName =
+                    "${env.DOCKER_REPO}:${env.IMAGE_NAME}"
+
                     echo "building the docker image..."
                     withCredentials([usernamePassword(credentialsId: 'ecr-credentials', passwordVariable: 'PASS', usernameVariable: 'USER')]){
-                        sh "docker build -t ${DOCKER_REPO}:${IMAGE_NAME} ."
+                        sh "docker build -t ${imageName} ."
                         sh "echo $PASS | docker login -u $USER --password-stdin ${DOCKER_REPO_SERVER}"
-                        sh "docker push ${DOCKER_REPO}:${IMAGE_NAME}"
+                        sh "docker push ${imageName}"
                     }
                 }
             }
@@ -57,17 +76,68 @@ pipeline {
                 }
             }
         }
-        stage('commit version update'){
-            steps {
-                script {
-                    withCredentials([usernamePassword(credentialsId: 'github-credentials', passwordVariable: 'PASS', usernameVariable: 'USER')]){
-                        sh "git remote set-url origin https://${USER}:${PASS}@github.com:asambataiden/twn-devops-bootcamp-11-eks-java-maven-app-tree-jenkins-jobs.git"
-                        sh 'git add .'
-                        sh 'git commit -m "ci: version bump"'
-                        sh 'git push origin HEAD:main'
+
+
+                stage('Commit Version Update') {
+                    when {
+                        branch 'commitVersionUpdate'
+                    }
+
+                    steps {
+                        script {
+                            echo "Preparing version commit for ${env.APP_VERSION}"
+
+                            sh '''
+                        set -eu
+
+                        git config user.name "Jenkins CI"
+                        git config user.email "jenkins-ci@users.noreply.github.com"
+
+                        git add pom.xml
+
+                        echo "Files staged for commit:"
+                        git diff --cached --name-only
+                    '''
+
+                            def hasChanges = sh(
+                                script: 'git diff --cached --quiet',
+                                returnStatus: true
+                            )
+
+                            if (hasChanges == 0) {
+                                echo 'No version change to commit. Skipping commit and push.'
+                            } else {
+                                sh """
+                            git commit \
+                              -m "chore(release): bump version to ${env.APP_VERSION}"
+                        """
+
+                                withCredentials([
+                                    gitUsernamePassword(
+                                        credentialsId: 'github-credentials',
+                                        gitToolName: 'Default'
+                                    )
+                                ]) {
+                                    sh '''
+                                set -eu
+                                git push origin HEAD:commitVersionUpdate
+                            '''
+                                }
+                            }
+                        }
                     }
                 }
+
             }
-        }
+
+            post {
+                success {
+                    echo "Pipeline completed successfully for version ${env.APP_VERSION}"
+                }
+
+                failure {
+                    echo 'Pipeline failed.'
+                }
+            }
     }
 }
