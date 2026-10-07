@@ -35,46 +35,25 @@ pipeline {
             steps {
                 script {
                     echo "building the docker image..."
-                    withCredentials([usernamePassword(credentialsId: 'docker-hub-repo-asambataiden', passwordVariable: 'PASS', usernameVariable: 'USER')]){
-                        sh "docker build -t asambataiden/demo-app:${IMAGE_NAME} ."
-                        sh 'echo $PASS | docker login -u $USER --password-stdin '
-                        sh "docker push asambataiden/demo-app:${IMAGE_NAME}"
+                    withCredentials([usernamePassword(credentialsId: 'ecr-credentials', passwordVariable: 'PASS', usernameVariable: 'USER')]){
+                        sh "docker build -t ${DOCKER_REPO}:${IMAGE_NAME} ."
+                        sh "echo $PASS | docker login -u $USER --password-stdin ${DOCKER_REPO_SERVER}"
+                        sh "docker push ${DOCKER_REPO}:${IMAGE_NAME}"
                     }
                 }
             }
         }
         stage('deploy') {
-/*             environment {
+            environment {
                 AWS_ACCESS_KEY_ID = credentials('jenkins_aws_access_key_id')
                 AWS_SECRET_ACCESS_KEY = credentials('jenkins-aws_secret_access_key')
                 APP_NAME = 'java-maven-app'
-            } */
+            }
             steps {
                 script {
                    echo 'deploying docker image...'
-withCredentials([
-    aws(
-        credentialsId: 'aws-eks-deploy',
-        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-    )
-        ]) {
-                        sh '''
-                            set -eu
-
-                            aws sts get-caller-identity
-
-                            aws eks update-kubeconfig \
-                              --name eks-cluster-test \
-                              --region eu-north-1
-
-                            envsubst < kubernetes/deployment.yaml | kubectl apply -f -
-                            envsubst < kubernetes/service.yaml | kubectl apply -f -
-
-                            kubectl rollout status deployment/${APP_NAME} \
-                              --timeout=180s
-                        '''
-                    }
+                   sh 'envsubst < kubernetes/deployment.yaml | kubectl apply -f -'
+                   sh 'envsubst < kubernetes/service.yaml | kubectl apply -f -'
                 }
             }
         }
