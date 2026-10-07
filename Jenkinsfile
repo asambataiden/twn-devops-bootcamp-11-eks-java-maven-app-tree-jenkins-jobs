@@ -64,7 +64,7 @@ pipeline {
                         sh "git remote set-url origin https://${USER}:${PASS}@github.com:asambataiden/twn-devops-bootcamp-11-eks-java-maven-app-tree-jenkins-jobs.git"
                         sh 'git add .'
                         sh 'git commit -m "ci: version bump"'
-                        sh 'git push origin HEAD:refs/heads/jenkins-jobs'
+                        sh 'git push origin HEAD:main'
                     }
                 }
             }
