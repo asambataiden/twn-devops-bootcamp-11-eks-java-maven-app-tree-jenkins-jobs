@@ -78,16 +78,17 @@ pipeline {
         }
 
 
-                stage('Commit Version Update') {
-                    when {
-                        branch 'commitVersionUpdate'
-                    }
+        stage('Commit Version Update') {
+            when {
+                branch 'commitVersionUpdate'
+            }
 
-                    steps {
-                        script {
+             steps {
+
+                script {
                             echo "Preparing version commit for ${env.APP_VERSION}"
 
-                            sh '''
+                   sh '''
                         set -eu
 
                         git config user.name "Jenkins CI"
@@ -138,6 +139,6 @@ pipeline {
                 failure {
                     echo 'Pipeline failed.'
                 }
-            }
-    }
+           }
+
 }
