@@ -52,8 +52,29 @@ pipeline {
             steps {
                 script {
                    echo 'deploying docker image...'
-                   sh 'envsubst < kubernetes/deployment.yaml | kubectl apply -f -'
-                   sh 'envsubst < kubernetes/service.yaml | kubectl apply -f -'
+withCredentials([
+    aws(
+        credentialsId: 'aws-eks-deploy',
+        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+    )
+        ]) {
+                        sh '''
+                            set -eu
+
+                            aws sts get-caller-identity
+
+                            aws eks update-kubeconfig \
+                              --name eks-cluster-test \
+                              --region eu-north-1
+
+                            envsubst < kubernetes/deployment.yaml | kubectl apply -f -
+                            envsubst < kubernetes/service.yaml | kubectl apply -f -
+
+                            kubectl rollout status deployment/${APP_NAME} \
+                              --timeout=180s
+                        '''
+                    }
                 }
             }
         }
