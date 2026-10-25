@@ -1,43 +1,37 @@
 pipeline {
     agent any
 
+    tools {
+        maven 'maven-3.9'
+    }
+
     options {
         timestamps()
     }
 
     stages {
-        stage('Inspect Jenkins Agent') {
+        stage('Verify Java and Jenkins-managed Maven') {
             steps {
                 sh '''
                     set -eu
-
-                    echo '=== Execution context ==='
-                    id
-                    uname -a
-                    echo "PATH=$PATH"
-
                     echo '=== Java ==='
-                    command -v java || true
-                    java -version || true
-
+                    java -version
                     echo '=== Maven ==='
-                    command -v mvn || true
-                    mvn -version || true
+                    mvn -version
+                '''
+            }
+        }
 
+        stage('Inspect deployment utilities') {
+            steps {
+                sh '''
                     echo '=== Docker ==='
-                    command -v docker || true
                     docker version || true
-
                     echo '=== AWS CLI ==='
-                    command -v aws || true
-                    aws --version || true
-
+                    if command -v aws >/dev/null 2>&1; then aws --version; else echo 'AWS CLI is not installed on this agent'; fi
                     echo '=== Kubernetes CLI ==='
-                    command -v kubectl || true
                     kubectl version --client || true
-
                     echo '=== envsubst ==='
-                    command -v envsubst || true
                     envsubst --version || true
                 '''
             }
