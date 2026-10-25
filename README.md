@@ -64,9 +64,7 @@ kubectl -n default port-forward service/java-maven-app 8080:80
 Delete application resources only when they are no longer required:
 
 ```bash
-kubectl -n default delete -f kubernetes/service.yaml --ignore-not-found
-# The Deployment manifest contains template variables. Render it first
-# with the same values used during deployment, or delete by its known name:
+kubectl -n default delete service java-maven-app --ignore-not-found
 kubectl -n default delete deployment java-maven-app --ignore-not-found
 ```
 
