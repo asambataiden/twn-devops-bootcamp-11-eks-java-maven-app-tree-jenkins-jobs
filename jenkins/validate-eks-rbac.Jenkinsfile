@@ -46,17 +46,17 @@ pipeline {
               "$endpoint" "$ca_data" "$token" "$K8S_NAMESPACE" > "$tmp_dir/config"
             unset token
 
+            # Docker daemon may run outside the Jenkins container.
+            # Stream kubeconfig over stdin instead of bind mounting a Jenkins path.
             kube() {
-              docker run --rm \
-                --user "$(id -u):$(id -g)" \
-                -v "$tmp_dir:/kube:ro" \
-                -e KUBECONFIG=/kube/config \
+              docker run --rm -i \
                 --entrypoint kubectl \
-                registry.k8s.io/kubectl:v1.34.1 "$@"
+                registry.k8s.io/kubectl:v1.34.1 \
+                --kubeconfig=/dev/stdin "$@" < "$tmp_dir/config"
             }
 
             echo "=== kubectl version ==="
-            kube version --client
+            docker run --rm --entrypoint kubectl registry.k8s.io/kubectl:v1.34.1 version --client
             echo "=== Verify namespace exists and is accessible ==="
             kube get namespace "$K8S_NAMESPACE"
             echo "=== Read-only Kubernetes authorization checks ==="
