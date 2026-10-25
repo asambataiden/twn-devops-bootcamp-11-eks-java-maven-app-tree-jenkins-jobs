@@ -1,7 +1,6 @@
 pipeline {
   agent any
   tools {
-    jdk 'jdk-21'
     maven 'maven-3.9'
   }
   options { timestamps(); disableConcurrentBuilds() }
