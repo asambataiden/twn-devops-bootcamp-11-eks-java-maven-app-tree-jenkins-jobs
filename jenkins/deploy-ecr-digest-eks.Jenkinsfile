@@ -73,7 +73,7 @@ pipeline {
             echo "=== Server-side manifest dry run ==="
             kube -n "$K8S_NAMESPACE" apply --dry-run=server \
               -f /tmp/deployment.yaml -f /tmp/service.yaml
-            if [ "$APPLY_DEPLOYMENT" != true ]; then
+            if [ "${APPLY_DEPLOYMENT:-false}" != "true" ]; then
               echo "Dry run passed; deployment disabled by default."
               exit 0
             fi
