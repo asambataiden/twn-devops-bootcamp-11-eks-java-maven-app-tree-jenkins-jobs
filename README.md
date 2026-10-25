@@ -28,6 +28,19 @@ GitHub → Jenkins (Maven verify + Docker build) → Amazon ECR → Amazon EKS (
 
 **Configuration:** Set `EKS_CLUSTER_NAME` to the actual cluster name before running. Confirm `AWS_ACCOUNT_ID`, `AWS_REGION`, `ECR_REPOSITORY`, and the AWS credentials ID. Never commit credentials, kubeconfigs, or access tokens.
 
+## Local container validation
+
+After a successful `mvn -B clean verify`, build a local image using the capstone naming convention:
+
+```bash
+docker build -t twn-capstone-01-eks-ecr-cicd:1.1.11-local .
+docker run --rm --name twn-capstone-01-app -p 127.0.0.1:8080:8080 twn-capstone-01-eks-ecr-cicd:1.1.11-local
+```
+
+In a second terminal, test a known application endpoint with `curl -i http://127.0.0.1:8080/`. If the root endpoint does not exist, inspect the application's controller mappings before choosing a health check. Stop the foreground container with Ctrl+C.
+
+The local image name is separate from the current ECR registry/repository configuration in `Jenkinsfile`. Any future ECR repository rename must be made together with AWS provisioning and IAM verification.
+
 ## Deployment and verification
 
 1. Review the pipeline and IAM permissions for the chosen AWS account.
