@@ -1,8 +1,6 @@
-FROM amazoncorretto:17-alpine-jdk
-
+FROM amazoncorretto:17-alpine-jre
+WORKDIR /app
+COPY target/java-maven-app-*.jar /app/app.jar
 EXPOSE 8080
-
-COPY ./target/java-maven-app-*.jar /usr/app/
-WORKDIR /usr/app
-
-CMD java -jar java-maven-app-*.jar
+USER 10001:10001
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]
