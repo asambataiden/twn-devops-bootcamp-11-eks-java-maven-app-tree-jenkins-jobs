@@ -1,73 +1,76 @@
-#!/usr/bin/env groovy
-
 pipeline {
-    agent any
-    tools {
-        maven 'maven-3.9'
+  agent any
+  tools { maven 'maven-3.9' }
+  options { timestamps(); disableConcurrentBuilds() }
+  environment {
+    AWS_REGION = 'eu-north-1'
+    AWS_ACCOUNT_ID = '591132357918'
+    ECR_REPOSITORY = 'twn-devops-bootcamp/java-maven-app'
+    EKS_CLUSTER_NAME = 'REPLACE_WITH_YOUR_EKS_CLUSTER_NAME'
+    APP_NAME = 'java-maven-app'
+    K8S_NAMESPACE = 'default'
+  }
+  stages {
+    stage('Build and test') {
+      steps {
+        sh 'mvn -B clean verify'
+        script {
+          env.APP_VERSION = sh(script: 'mvn -q -DforceStdout help:evaluate -Dexpression=project.version | tail -n 1', returnStdout: true).trim()
+          env.IMAGE_TAG = "${env.APP_VERSION}-${env.BUILD_NUMBER}"
+          env.ECR_REGISTRY = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_REGION}.amazonaws.com"
+          env.IMAGE_URI = "${env.ECR_REGISTRY}/${env.ECR_REPOSITORY}:${env.IMAGE_TAG}"
+        }
+      }
     }
-    environment {
-        DOCKER_REPO_SERVER = '591132357918.dkr.ecr.eu-north-1.amazonaws.com'
-        DOCKER_REPO = "${DOCKER_REPO_SERVER}/twn-devops-bootcamp/java-maven-app"
+    stage('Build container') {
+      steps { sh 'docker build --tag "$IMAGE_URI" .' }
     }
-    stages {
-        stage('increment version') {
-            steps {
-                script {
-                    echo 'incrementing app version...'
-                    sh 'mvn build-helper:parse-version versions:set \
-                        -DnewVersion=\\\${parsedVersion.majorVersion}.\\\${parsedVersion.minorVersion}.\\\${parsedVersion.nextIncrementalVersion} \
-                        versions:commit'
-                    def matcher = readFile('pom.xml') =~ '<version>(.+)</version>'
-                    def version = matcher[0][1]
-                    env.IMAGE_NAME = "$version-$BUILD_NUMBER"
-                }
-            }
+    stage('Push image to ECR') {
+      steps {
+        withCredentials([[
+          $class: 'AmazonWebServicesCredentialsBinding',
+          credentialsId: 'aws-jenkins-capstone-01',
+          accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+          secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+        ]]) {
+          sh '''
+            set -eu
+            aws ecr get-login-password --region "$AWS_REGION" |
+              docker login --username AWS --password-stdin "$ECR_REGISTRY"
+            docker push "$IMAGE_URI"
+            docker logout "$ECR_REGISTRY"
+          '''
         }
-        stage('build app') {
-            steps {
-                script {
-                    echo 'building the application...'
-                    sh 'mvn clean package'
-                }
-            }
-        }
-        stage('build image') {
-            steps {
-                script {
-                    echo "building the docker image..."
-                    withCredentials([usernamePassword(credentialsId: 'ecr-credentials', passwordVariable: 'PASS', usernameVariable: 'USER')]){
-                        sh "docker build -t ${DOCKER_REPO}:${IMAGE_NAME} ."
-                        sh "echo $PASS | docker login -u $USER --password-stdin ${DOCKER_REPO_SERVER}"
-                        sh "docker push ${DOCKER_REPO}:${IMAGE_NAME}"
-                    }
-                }
-            }
-        }
-        stage('deploy') {
-            environment {
-                AWS_ACCESS_KEY_ID = credentials('jenkins_aws_access_key_id')
-                AWS_SECRET_ACCESS_KEY = credentials('jenkins-aws_secret_access_key')
-                APP_NAME = 'java-maven-app'
-            }
-            steps {
-                script {
-                   echo 'deploying docker image...'
-                   sh 'envsubst < kubernetes/deployment.yaml | kubectl apply -f -'
-                   sh 'envsubst < kubernetes/service.yaml | kubectl apply -f -'
-                }
-            }
-        }
-        stage('commit version update'){
-            steps {
-                script {
-                    withCredentials([usernamePassword(credentialsId: 'github-credentials', passwordVariable: 'PASS', usernameVariable: 'USER')]){
-                        sh "git remote set-url origin https://${USER}:${PASS}@github.com:asambataiden/twn-devops-bootcamp-11-eks-java-maven-app-tree-jenkins-jobs.git"
-                        sh 'git add .'
-                        sh 'git commit -m "ci: version bump"'
-                        sh 'git push origin HEAD:main'
-                    }
-                }
-            }
-        }
+      }
     }
+    stage('Deploy to EKS') {
+      steps {
+        withCredentials([[
+          $class: 'AmazonWebServicesCredentialsBinding',
+          credentialsId: 'aws-jenkins-capstone-01',
+          accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+          secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+        ]]) {
+          sh '''
+            set -eu
+            test "$EKS_CLUSTER_NAME" != REPLACE_WITH_YOUR_EKS_CLUSTER_NAME
+            export KUBECONFIG="$(mktemp)"
+            trap 'rm -f "$KUBECONFIG"' EXIT
+            aws eks update-kubeconfig --region "$AWS_REGION" --name "$EKS_CLUSTER_NAME" --kubeconfig "$KUBECONFIG"
+            kubectl -n "$K8S_NAMESPACE" set image deployment/"$APP_NAME" "$APP_NAME"="$IMAGE_URI" --record=false 2>/dev/null || {
+              export APP_NAME IMAGE_URI
+              envsubst < kubernetes/deployment.yaml | kubectl -n "$K8S_NAMESPACE" apply -f -
+            }
+            export APP_NAME IMAGE_URI
+            envsubst < kubernetes/deployment.yaml | kubectl -n "$K8S_NAMESPACE" apply -f -
+            envsubst < kubernetes/service.yaml | kubectl -n "$K8S_NAMESPACE" apply -f -
+            kubectl -n "$K8S_NAMESPACE" rollout status deployment/"$APP_NAME" --timeout=180s
+          '''
+        }
+      }
+    }
+  }
+  post {
+    always { archiveArtifacts artifacts: 'target/surefire-reports/*.xml', allowEmptyArchive: true }
+  }
 }
