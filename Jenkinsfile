@@ -8,9 +8,9 @@ pipeline {
     AWS_REGION = 'eu-north-1'
     AWS_ACCOUNT_ID = '591132357918'
     ECR_REPOSITORY = 'twn-devops-bootcamp/java-maven-app'
-    EKS_CLUSTER_NAME = 'REPLACE_WITH_YOUR_EKS_CLUSTER_NAME'
+    EKS_CLUSTER_NAME = 'floral-mongoose-1792497995'
     APP_NAME = 'java-maven-app'
-    K8S_NAMESPACE = 'default'
+    K8S_NAMESPACE = 'capstone-01'
   }
   stages {
     stage('Build and test') {
