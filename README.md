@@ -12,14 +12,14 @@ GitHub → Jenkins (Maven verify + Docker build) → Amazon ECR → Amazon EKS (
 
 ## Existing implementation
 
-- Spring Boot Java 17 application and Maven build
+- Spring Boot Java 21 application and Maven build
 - Declarative `Jenkinsfile` with build, image, push, deployment, and rollout stages
 - Multi-replica Kubernetes Deployment and internal Service in `kubernetes/`
 - Runtime Docker image with fixed entrypoint and non-root UID
 
 ## Prerequisites
 
-- Jenkins agent: Java 17, Maven tool named `maven-3.9`, Docker, AWS CLI, `kubectl`, and `envsubst`
+- Jenkins agent: Java 21 (Jenkins JDK tool named `jdk-21`), Maven tool named `maven-3.9`, Docker, AWS CLI, `kubectl`, and `envsubst`
 - Jenkins AWS Credentials plugin and a credentials entry with ID `aws-jenkins-capstone-01`
 - ECR repository `twn-devops-bootcamp/java-maven-app` in the configured AWS region/account
 - An EKS cluster with sufficient worker capacity and an IAM principal authorized for Kubernetes deployment
@@ -30,7 +30,7 @@ GitHub → Jenkins (Maven verify + Docker build) → Amazon ECR → Amazon EKS (
 
 ## Local container validation
 
-After a successful `mvn -B clean verify`, build a local image using the capstone naming convention:
+With Java 21 selected (`java -version` and `mvn -version`), after a successful `mvn -B clean verify`, build a local image using the capstone naming convention:
 
 ```bash
 docker build -t twn-capstone-01-eks-ecr-cicd:1.1.11-local .
@@ -88,7 +88,8 @@ Remove ECR images and delete any temporary EKS/cloud infrastructure separately, 
 - [x] Existing source, Jenkinsfile, Dockerfile and manifests reviewed
 - [x] Pipeline, runtime image and manifest improvements committed on a feature branch
 - [ ] Jenkins agent and AWS credential prerequisites verified
-- [ ] Maven build and container build executed on current branch
+- [x] Maven build and one JUnit 5 test passed previously on Java 21 with the Java 17 compiler target
+- [ ] Maven build revalidated with Java 21 compiler target and container build executed on current branch
 - [ ] ECR push and EKS rollout executed successfully
 - [ ] Application HTTP response verified
 - [ ] Final TWN submission description, evidence and secure publication review completed
