@@ -1,6 +1,9 @@
 pipeline {
   agent any
-  tools { maven 'maven-3.9' }
+  tools {
+    jdk 'jdk-21'
+    maven 'maven-3.9'
+  }
   options { timestamps(); disableConcurrentBuilds() }
   environment {
     AWS_REGION = 'eu-north-1'
