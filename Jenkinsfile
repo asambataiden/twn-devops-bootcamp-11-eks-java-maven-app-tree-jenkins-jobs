@@ -57,10 +57,6 @@ pipeline {
             export KUBECONFIG="$(mktemp)"
             trap 'rm -f "$KUBECONFIG"' EXIT
             aws eks update-kubeconfig --region "$AWS_REGION" --name "$EKS_CLUSTER_NAME" --kubeconfig "$KUBECONFIG"
-            kubectl -n "$K8S_NAMESPACE" set image deployment/"$APP_NAME" "$APP_NAME"="$IMAGE_URI" --record=false 2>/dev/null || {
-              export APP_NAME IMAGE_URI
-              envsubst < kubernetes/deployment.yaml | kubectl -n "$K8S_NAMESPACE" apply -f -
-            }
             export APP_NAME IMAGE_URI
             envsubst < kubernetes/deployment.yaml | kubectl -n "$K8S_NAMESPACE" apply -f -
             envsubst < kubernetes/service.yaml | kubectl -n "$K8S_NAMESPACE" apply -f -
