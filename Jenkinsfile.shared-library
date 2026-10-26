@@ -1,0 +1,152 @@
+@Library('twn-devops-bootcamp-jenkins-shared-library@feat/library-foundation') _
+
+// Capstone 01 integration candidate. Shared Library name/version must first
+// be configured in Jenkins Global Pipeline Libraries. Not production pinned.
+pipeline {
+    agent { label 'docker-aws-kubectl' }
+
+    options {
+        disableConcurrentBuilds()
+        timestamps()
+        skipDefaultCheckout(true)
+        timeout(time: 45, unit: 'MINUTES')
+    }
+
+    tools {
+        maven 'maven-3.9'
+    }
+
+    parameters {
+        booleanParam(
+            name: 'PUBLISH_AND_DEPLOY',
+            defaultValue: false,
+            description: 'Explicitly allow the approved ECR push and EKS rollout on main'
+        )
+        string(
+            name: 'EKS_CLUSTER',
+            defaultValue: '',
+            description: 'Approved existing EKS cluster name; required to deploy'
+        )
+    }
+
+    environment {
+        AWS_ACCOUNT_ID = '591132357918'
+        AWS_REGION = 'eu-north-1'
+        ECR_REPOSITORY = 'twn-devops-bootcamp/java-maven-app'
+        EKS_NAMESPACE = 'default'
+        K8S_DEPLOYMENT = 'java-maven-app'
+        K8S_CONTAINER = 'java-maven-app'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+                script {
+                    if (!(env.GIT_COMMIT ==~ /[a-fA-F0-9]{40}/)) {
+                        error('Expected a full Git commit SHA from checkout')
+                    }
+                    env.ECR_TAG = "git-${env.GIT_COMMIT.substring(0, 12)}"
+                    echo "Source revision: ${env.GIT_COMMIT}"
+                }
+            }
+        }
+
+        stage('Maven verification') {
+            steps {
+                mavenVerify()
+            }
+        }
+
+        stage('Maven package') {
+            steps {
+                mavenBuild(skipTests: true)
+            }
+        }
+
+        stage('ECR image build') {
+            steps {
+                script {
+                    env.ECR_IMAGE = ecrBuild(
+                        accountId: env.AWS_ACCOUNT_ID,
+                        region: env.AWS_REGION,
+                        repository: env.ECR_REPOSITORY,
+                        tag: env.ECR_TAG
+                    )
+                }
+            }
+        }
+
+        stage('Release approval') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { params.PUBLISH_AND_DEPLOY }
+                }
+            }
+            steps {
+                script {
+                    if (!params.EKS_CLUSTER?.trim()) {
+                        error('EKS_CLUSTER must be specified for release')
+                    }
+                }
+                input message: 'Publish this image to ECR and deploy to EKS?',
+                      ok: 'Approve release'
+            }
+        }
+
+        stage('ECR publish') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { params.PUBLISH_AND_DEPLOY }
+                }
+            }
+            steps {
+                script {
+                    ecrPush(
+                        accountId: env.AWS_ACCOUNT_ID,
+                        region: env.AWS_REGION,
+                        repository: env.ECR_REPOSITORY,
+                        tag: env.ECR_TAG
+                    )
+                    env.IMMUTABLE_IMAGE = ecrImageDigest(
+                        accountId: env.AWS_ACCOUNT_ID,
+                        region: env.AWS_REGION,
+                        repository: env.ECR_REPOSITORY,
+                        tag: env.ECR_TAG
+                    )
+                    echo "Published image digest: ${env.IMMUTABLE_IMAGE}"
+                }
+            }
+        }
+
+        stage('Verified EKS rollout') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { params.PUBLISH_AND_DEPLOY }
+                }
+            }
+            steps {
+                script {
+                    eksDeployVerified(
+                        accountId: env.AWS_ACCOUNT_ID,
+                        region: env.AWS_REGION,
+                        cluster: params.EKS_CLUSTER.trim(),
+                        namespace: env.EKS_NAMESPACE,
+                        deployment: env.K8S_DEPLOYMENT,
+                        container: env.K8S_CONTAINER,
+                        image: env.IMMUTABLE_IMAGE
+                    )
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            echo "Capstone 01 pipeline finished: ${currentBuild.currentResult}"
+        }
+    }
+}
